@@ -2,11 +2,8 @@ use rand::Rng;
 use crate::rooms::Room;
 
 pub fn generate_code() -> String {
-  rand::thread_rng()
-    .sample_iter(&rand::distributions::Alphanumeric)
-    .take(6)
-    .map(char::from)
-    .collect()
+  let code = rand::thread_rng().gen_range(0..10000);
+  format!("{:04}", code)
 }
 
 pub fn assign_characters(room: &mut Room) {
