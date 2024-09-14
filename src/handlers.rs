@@ -182,15 +182,22 @@ async fn end_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
 
 async fn info(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let rooms = rooms.lock().await;
+
+  if rooms.is_empty() {
+    bot.send_message(msg.chat.id, "There are no active rooms at the moment.")
+      .await?;
+    return Ok(());
+  }
+
   let info = rooms.iter().map(|(code, room)| {
     let host_username = room.players.get(&room.host).map(|p| p.username.clone()).unwrap_or_default();
     let players_info = room.players.iter()
-      .map(|(_, p)| format!("{}\n", p.username))
+      .map(|(_, p)| format!("{}", escape(&p.username)))
       .collect::<Vec<_>>()
       .join(", ");
-    format!("Room\\: `{}`\nHost\\: {}\nPlayers\\: {}Status\\: {:?}",
+    format!("Room: `{}`\nHost: {}\nPlayers: {}\nStatus: {:?}",
             escape(code), escape(&host_username), players_info, room.status)
-  }).collect::<Vec<_>>().join("\n");
+  }).collect::<Vec<_>>().join("\n\n");
 
   bot
     .send_message(msg.chat.id, info)
