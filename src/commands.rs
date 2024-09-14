@@ -11,6 +11,8 @@ pub enum Command {
   Create,
   #[command(description = "Unisciti a una stanza. Uso: /join <codice>")]
   Join(String),
+  #[command(description = "Esci dalla stanza")]
+  Leave,
   #[command(description = "Scegli il tuo personaggio. Uso: /character <nome>")]
   Character(String),
   #[command(description = "Inizia la partita (solo host)")]

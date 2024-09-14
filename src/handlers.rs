@@ -17,6 +17,7 @@ pub async fn handle_command(
     Command::Help => help(bot, msg).await,
     Command::Create => create(bot, msg, rooms).await,
     Command::Join(code) => join(bot, msg, rooms, code).await,
+    Command::Leave => leave(bot, msg, rooms).await,
     Command::Character(character) => set_character(bot, msg, rooms, character).await,
     Command::Play => play(bot, msg, rooms).await,
     Command::Startgame => start_game(bot, msg, rooms).await,
@@ -90,6 +91,24 @@ async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseRes
     }
   } else {
     bot.send_message(msg.chat.id, "Invalid room code.").await?;
+  }
+  Ok(())
+}
+
+async fn leave(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
+  let user_id = msg.from.unwrap().id.0;
+
+  let mut rooms = rooms.lock().await;
+  if let Some(code) = rooms.iter().find_map(|(code, room)| if room.players.contains_key(&user_id) { Some(code.clone()) } else { None }) {
+    if let Some(room) = rooms.get_mut(&code) {
+      room.players.remove(&user_id);
+      if room.players.is_empty() {
+        rooms.remove(&code);
+      }
+    }
+    bot.send_message(msg.chat.id, "You have left the room.").await?;
+  } else {
+    bot.send_message(msg.chat.id, "You are not in any room.").await?;
   }
   Ok(())
 }
