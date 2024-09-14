@@ -4,8 +4,8 @@ use tokio::sync::Mutex;
 
 #[derive(Clone, Debug)]
 pub struct Room {
-  pub host: UserId,
-  pub players: HashMap<UserId, Player>,
+  pub host: u64,
+  pub players: HashMap<u64, Player>,
   pub status: RoomStatus,
 }
 
@@ -23,10 +23,9 @@ pub enum RoomStatus {
 }
 
 pub type Rooms = Arc<Mutex<HashMap<String, Room>>>;
-pub type UserId = i64;
 
 impl Room {
-  pub fn new(host: UserId) -> Self {
+  pub fn new(host: u64) -> Self {
     Room {
       host,
       players: HashMap::new(),

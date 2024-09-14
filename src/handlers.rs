@@ -1,6 +1,8 @@
 use teloxide::prelude::*;
+use teloxide::types::ParseMode;
 use teloxide::utils::command::BotCommands;
-use crate::rooms::{Rooms, Room, Player, RoomStatus, UserId};
+use teloxide::utils::markdown::escape;
+use crate::rooms::{Rooms, Room, Player, RoomStatus};
 use crate::commands::Command;
 use crate::utils::{generate_code, assign_characters};
 
@@ -24,7 +26,12 @@ pub async fn handle_command(
 }
 
 async fn start(bot: Bot, msg: Message) -> ResponseResult<()> {
-  bot.send_message(msg.chat.id, "Welcome to the Among Us bot!").await?;
+  bot
+    .send_message(
+      msg.chat.id,
+      "Ma salve\\! Vuoi giocare a *Indovina Chi*\\?\nBeh questo è il posto giusto😉\n\nPuoi esplorare i comandi usando /help\nBuon divertimento\\!\\!")
+    .parse_mode(ParseMode::MarkdownV2)
+    .await?;
   Ok(())
 }
 
@@ -34,7 +41,9 @@ async fn help(bot: Bot, msg: Message) -> ResponseResult<()> {
 }
 
 async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
+  let from = msg.from.unwrap();
+  let user_id = from.id.0;
+  let username = from.username.clone().unwrap_or_default();
 
   let mut rooms = rooms.lock().await;
   if rooms.values().any(|room| room.players.contains_key(&user_id)) {
@@ -43,16 +52,29 @@ async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   }
 
   let code = generate_code();
-  let room = Room::new(user_id);
+  let mut room = Room::new(user_id);
+  room.players.insert(user_id, Player {
+    username: username.clone(),
+    character: None,
+    assigned_character: None,
+  });
   rooms.insert(code.clone(), room);
 
-  bot.send_message(msg.chat.id, format!("Room created! Use the code {} to invite other players.", code)).await?;
+  let response = format!(
+    "Stanza creata\\!\nIl codice è: `{}`",
+    escape(&code)
+  );
+
+  bot.send_message(msg.chat.id, response)
+    .parse_mode(ParseMode::MarkdownV2)
+    .await?;
   Ok(())
 }
 
 async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
-  let username = msg.from().unwrap().username.clone().unwrap_or_default();
+  let from = msg.from.unwrap();
+  let user_id = from.id.0;
+  let username = from.username.clone().unwrap_or_default();
 
   let mut rooms = rooms.lock().await;
   if let Some(room) = rooms.get_mut(&code) {
@@ -73,7 +95,7 @@ async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseRes
 }
 
 async fn set_character(bot: Bot, msg: Message, rooms: Rooms, character: String) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
+  let user_id = msg.from.unwrap().id.0;
 
   let mut rooms = rooms.lock().await;
   for room in rooms.values_mut() {
@@ -94,10 +116,10 @@ async fn set_character(bot: Bot, msg: Message, rooms: Rooms, character: String) 
 }
 
 async fn play(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
+  let user_id = msg.from.unwrap().id.0;
 
   let mut rooms = rooms.lock().await;
-  for (code, room) in rooms.iter_mut() {
+  for (_, room) in rooms.iter_mut() {
     if room.host == user_id {
       if room.players.len() < 2 {
         bot.send_message(msg.chat.id, "There must be at least 2 players to start the game.").await?;
@@ -115,10 +137,10 @@ async fn play(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
 }
 
 async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
+  let user_id = msg.from.unwrap().id.0;
 
   let mut rooms = rooms.lock().await;
-  for (code, room) in rooms.iter_mut() {
+  for (_, room) in rooms.iter_mut() {
     if room.host == user_id {
       if room.players.values().any(|p| p.character.is_none()) {
         bot.send_message(msg.chat.id, "All players must choose a character before starting the game.").await?;
@@ -134,7 +156,7 @@ async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> 
                                   .collect::<Vec<_>>()
                                   .join("\n")
           );
-          bot.send_message(ChatId(*player_id), message).await?;
+          bot.send_message(ChatId(*player_id as i64), message).await?;
         }
         bot.send_message(msg.chat.id, "The game has started! Assignments have been sent.").await?;
       }
@@ -146,7 +168,7 @@ async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> 
 }
 
 async fn end_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
-  let user_id = msg.from().unwrap().id.0;
+  let user_id = msg.from.unwrap().id.0;
 
   let mut rooms = rooms.lock().await;
   if let Some(code) = rooms.iter().find_map(|(code, room)| if room.host == user_id { Some(code.clone()) } else { None }) {
@@ -163,12 +185,17 @@ async fn info(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let info = rooms.iter().map(|(code, room)| {
     let host_username = room.players.get(&room.host).map(|p| p.username.clone()).unwrap_or_default();
     let players_info = room.players.iter()
-      .map(|(_, p)| format!("{} (proposed: {:?}, to guess: {:?})", p.username, p.character, p.assigned_character))
+      .map(|(_, p)| format!("{}\n", p.username))
       .collect::<Vec<_>>()
       .join(", ");
-    format!("Room {}: Host: {}, Players: {}, Status: {:?}", code, host_username, players_info, room.status)
+    format!("Room\\: `{}`\nHost\\: {}\nPlayers\\: {}Status\\: {:?}",
+            escape(code), escape(&host_username), players_info, room.status)
   }).collect::<Vec<_>>().join("\n");
 
-  bot.send_message(msg.chat.id, info).await?;
+  bot
+    .send_message(msg.chat.id, info)
+    .parse_mode(ParseMode::MarkdownV2)
+    .await?;
+
   Ok(())
 }
