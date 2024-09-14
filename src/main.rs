@@ -14,6 +14,8 @@ async fn main() {
     log::info!("Starting bot...");
 
     let bot = Bot::from_env();
+    bot.send_message(ChatId(698410803), "Il bot è stato avviato✅").await.unwrap();
+
     let rooms: Rooms = Arc::new(tokio::sync::Mutex::new(Default::default()));
 
     let handler = Update::filter_message()
