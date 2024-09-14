@@ -3,22 +3,22 @@ use teloxide::utils::command::BotCommands;
 #[derive(BotCommands, Clone, Debug)]
 #[command(rename_rule = "lowercase", description = "Available commands:")]
 pub enum Command {
-  #[command(description = "Start the bot")]
+  #[command(description = "Avvia il bot")]
   Start,
-  #[command(description = "Display this help message")]
+  #[command(description = "Mostra questo testo di aiuto")]
   Help,
-  #[command(description = "Create a new room")]
+  #[command(description = "Crea una stanza")]
   Create,
-  #[command(description = "Join a room")]
+  #[command(description = "Unisciti a una stanza. Uso: /join <codice>")]
   Join(String),
-  #[command(description = "Choose your character")]
+  #[command(description = "Scegli il tuo personaggio. Uso: /character <nome>")]
   Character(String),
-  #[command(description = "Start the game")]
+  #[command(description = "Inizia la partita (solo host)")]
   Play,
-  #[command(description = "Assign characters randomly and start the game")]
+  #[command(description = "Assegna i personaggi casualmente (solo host)")]
   Startgame,
-  #[command(description = "End the game")]
+  #[command(description = "Termina la partita (solo host)")]
   End,
-  #[command(description = "Display game information")]
+  #[command(description = "Mostra lo stato delle stanze")]
   Info,
 }
