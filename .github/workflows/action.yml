@@ -6,20 +6,39 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted  # This targets your Raspberry Pi runner
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Build and deploy Docker image
         env:
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
         run: |
-          sudo docker build -t ic-bot .
+          sudo docker buildx build \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new \
+            --tag ic-bot \
+            --load \
+            .
           sudo docker stop ic-bot || true
           sudo docker rm ic-bot || true
           sudo docker run -d --name ic-bot \
             -e TELOXIDE_TOKEN=$TELOXIDE_TOKEN \
             ic-bot
+
+      # Ottimizza la cache per le build future
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
