@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use serde::Serialize;
 use tokio::sync::Mutex;
 
 #[derive(Clone, Debug)]
@@ -9,14 +10,14 @@ pub struct Room {
   pub status: RoomStatus,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Player {
   pub username: String,
   pub character: Option<String>,
   pub assigned_character: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub enum RoomStatus {
   Waiting,
   Started,

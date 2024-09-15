@@ -17,9 +17,9 @@ jobs:
         env:
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
         run: |
-          docker build -t ic-bot .
-          docker stop ic-bot || true
-          docker rm ic-bot || true
-          docker run -d --name ic-bot \
+          sudo docker build -t ic-bot .
+          sudo docker stop ic-bot || true
+          sudo docker rm ic-bot || true
+          sudo docker run -d --name ic-bot \
             -e TELOXIDE_TOKEN=$TELOXIDE_TOKEN \
             ic-bot
