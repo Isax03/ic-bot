@@ -16,10 +16,12 @@ jobs:
       - name: Build and deploy Docker image
         env:
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          MAIN_USER_ID: ${{ secrets.MAIN_USER_ID }}
         run: |
           sudo docker build -t ic-bot .
           sudo docker stop ic-bot || true
           sudo docker rm ic-bot || true
           sudo docker run -dt --name ic-bot \
             -e TELOXIDE_TOKEN=$TELOXIDE_TOKEN \
+            -e MAIN_USER_ID=$MAIN_USER_ID \
             ic-bot

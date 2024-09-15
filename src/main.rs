@@ -17,8 +17,10 @@ async fn main() {
 
   let bot = Bot::from_env();
 
+  let user_id = std::env::var("MAIN_USER_ID").unwrap().parse::<i64>().unwrap();
+
   println!("{}", "!!! Il bot è stato avviato !!!".bright_green().bold());
-  bot.send_message(ChatId(698410803), "Il bot è stato avviato✅").await.unwrap();
+  bot.send_message(ChatId(user_id), "Il bot è stato avviato✅").await.unwrap();
 
   let rooms: Rooms = Arc::new(tokio::sync::Mutex::new(Default::default()));
 
