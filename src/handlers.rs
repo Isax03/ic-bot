@@ -19,9 +19,23 @@ pub async fn handle_command(
     Command::Start => start(bot, msg).await,
     Command::Help => help(bot, msg).await,
     Command::Create => create(bot, msg, rooms).await,
-    Command::Join(code) => join(bot, msg, rooms, code).await,
+    Command::Join(code) => {
+      if code.trim().is_empty() {
+        bot.send_message(msg.chat.id, "Per favore, specifica un codice stanza. Uso: /join <codice>").await?;
+        Ok(())
+      } else {
+        join(bot, msg, rooms, code).await
+      }
+    },
     Command::Leave => leave(bot, msg, rooms).await,
-    Command::Character(character) => set_character(bot, msg, rooms, character).await,
+    Command::Character(character) => {
+      if character.trim().is_empty() {
+        bot.send_message(msg.chat.id, "Per favore, specifica un personaggio. Uso: /character <nome>").await?;
+        Ok(())
+      } else {
+        set_character(bot, msg, rooms, character).await
+      }
+    },
     Command::Play => play(bot, msg, rooms).await,
     Command::Startgame => start_game(bot, msg, rooms).await,
     Command::End => end_game(bot, msg, rooms).await,
