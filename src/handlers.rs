@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use teloxide::prelude::*;
-use teloxide::types::ParseMode;
+use teloxide::types::{ParseMode, User};
 use teloxide::utils::command::BotCommands;
 use teloxide::utils::markdown::escape;
 use crate::rooms::{Rooms, Room, Player, RoomStatus};
@@ -29,6 +29,10 @@ pub async fn handle_command(
   }
 }
 
+fn get_display_name(user: &User) -> String {
+  user.username.clone().map(|u| format!("@{}", u)).unwrap_or_else(|| user.first_name.clone())
+}
+
 async fn start(bot: Bot, msg: Message) -> ResponseResult<()> {
   bot
     .send_message(
@@ -47,7 +51,7 @@ async fn help(bot: Bot, msg: Message) -> ResponseResult<()> {
 async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   if rooms.values().any(|room| room.players.contains_key(&user_id)) {
@@ -58,7 +62,7 @@ async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let code = generate_code();
   let mut room = Room::new(user_id);
   room.players.insert(user_id, Player {
-    username: username.clone(),
+    username: display_name.clone(),
     character: None,
     assigned_character: None,
   });
@@ -69,7 +73,7 @@ async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
     escape(&code)
   );
 
-  println!("{} {} ha creato la stanza {}", "CREATED:".green().bold(), username.green().italic(), code.green().italic());
+  println!("{} {} ha creato la stanza {}", "CREATED:".green().bold(), display_name.green().italic(), code.green().italic());
 
   bot.send_message(msg.chat.id, response)
     .parse_mode(ParseMode::MarkdownV2)
@@ -80,7 +84,7 @@ async fn create(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
 async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   if rooms.values().any(|room| room.players.contains_key(&user_id)) {
@@ -90,12 +94,18 @@ async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseRes
       bot.send_message(msg.chat.id, "Sei già in questa stanza").await?;
     } else {
       room.players.insert(user_id, Player {
-        username: username.clone(),
+        username: display_name.clone(),
         character: None,
         assigned_character: None,
       });
-      println!("{} {} è entrato nella stanza {}", "JOINED:".blue().bold(), username.blue().italic(), code.blue().italic());
+      // Notifica tutti i giocatori eccetto il nuovo arrivato
+      for player_id in room.players.keys() {
+        if player_id != &user_id {
+          bot.send_message(ChatId(*player_id as i64), format!("{} è entrato nella stanza", display_name)).await?;
+        }
+      }
       bot.send_message(msg.chat.id, format!("Sei entrato nella stanza {}", code)).await?;
+      println!("{} {} è entrato nella stanza {}", "JOINED:".blue().bold(), display_name.blue().italic(), code.blue().italic());
     }
   } else {
     bot.send_message(msg.chat.id, format!("Nessuna stanza con codice {} trovata", code)).await?;
@@ -106,17 +116,29 @@ async fn join(bot: Bot, msg: Message, rooms: Rooms, code: String) -> ResponseRes
 async fn leave(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   if let Some(code) = rooms.iter().find_map(|(code, room)| if room.players.contains_key(&user_id) { Some(code.clone()) } else { None }) {
     if let Some(room) = rooms.get_mut(&code) {
+      println!("{} {} ha lasciato la stanza {}", "LEFT:".yellow().bold(), display_name.yellow().italic(), code.yellow().italic());
       room.players.remove(&user_id);
+      for player_id in room.players.keys() {
+        bot.send_message(ChatId(*player_id as i64), format!("{} ha lasciato la stanza", display_name)).await?;
+      }
+      if room.host == user_id {
+        if let Some((&new_host, _)) = room.players.iter().next() {
+          room.host = new_host;
+          for player_id in room.players.keys() {
+            bot.send_message(ChatId(*player_id as i64), format!("{} è il nuovo host della stanza", room.players.get(&new_host).unwrap().username)).await?;
+          }
+        }
+      }
       if room.players.is_empty() {
+        println!("{} La stanza {} è vuota ed è stata chiusa", "CLOSED:".red().bold(), code.red().italic());
         rooms.remove(&code);
       }
     }
-    println!("{} {} ha lasciato la stanza {}", "LEFT:".yellow().bold(), username.yellow().italic(), code.yellow().italic());
     bot.send_message(msg.chat.id, "Hai lasciato la stanza").await?;
   } else {
     bot.send_message(msg.chat.id, "Non sei in nessuna stanza").await?;
@@ -127,7 +149,7 @@ async fn leave(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
 async fn set_character(bot: Bot, msg: Message, rooms: Rooms, character: String) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   for (code, room) in rooms.iter_mut() {
@@ -138,7 +160,7 @@ async fn set_character(bot: Bot, msg: Message, rooms: Rooms, character: String) 
         bot.send_message(msg.chat.id, "Hai già scelto un personaggio").await?;
       } else {
         player.character = Some(character.clone());
-        println!("{} {} ha scelto il personaggio {} nella stanza {}", "CHARACTER:".purple().bold(), username.purple().italic(), character.purple().italic(), code.purple().italic());
+        println!("{} {} ha scelto il personaggio {} nella stanza {}", "CHARACTER:".purple().bold(), display_name.purple().italic(), character.purple().italic(), code.purple().italic());
         bot.send_message(msg.chat.id, "Personaggio impostato con successo").await?;
       }
       return Ok(());
@@ -151,7 +173,7 @@ async fn set_character(bot: Bot, msg: Message, rooms: Rooms, character: String) 
 async fn play(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   for (code, room) in rooms.iter_mut() {
@@ -160,7 +182,7 @@ async fn play(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
         bot.send_message(msg.chat.id, "Ci devono essere almeno 2 giocatori per preparare la partita").await?;
       } else if room.status == RoomStatus::Waiting {
         room.status = RoomStatus::Started;
-        println!("{} {} ha iniziato la preparazione del gioco nella stanza {}", "PLAY:".yellow().bold(), username.yellow().italic(), code.yellow().italic());
+        println!("{} {} ha iniziato la preparazione del gioco nella stanza {}", "PLAY:".yellow().bold(), display_name.yellow().italic(), code.yellow().italic());
         for player_id in room.players.keys() {
           bot.send_message(ChatId(*player_id as i64), "Il gioco sta per cominciare! Tutti i giocatori devono scegliere un personaggio").await?;
         }
@@ -177,7 +199,7 @@ async fn play(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
 async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
   for (code, room) in rooms.iter_mut() {
@@ -204,7 +226,7 @@ async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> 
           );
           bot.send_message(ChatId(*player_id as i64), message).await?;
         }
-        println!("{} {} ha avviato il gioco nella stanza {}", "STARTGAME:".magenta().bold(), username.magenta().italic(), code.magenta().italic());
+        println!("{} {} ha avviato il gioco nella stanza {}", "STARTGAME:".magenta().bold(), display_name.magenta().italic(), code.magenta().italic());
         bot.send_message(msg.chat.id, "Il gioco è iniziato! I personaggi sono stati assegnati").await?;
       }
       return Ok(());
@@ -217,19 +239,32 @@ async fn start_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> 
 async fn end_game(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let from = msg.from.unwrap();
   let user_id = from.id.0;
-  let username = from.username.clone().unwrap_or_default();
+  let display_name = get_display_name(&from);
 
   let mut rooms = rooms.lock().await;
-  if let Some(code) = rooms.iter().find_map(|(code, room)| if room.host == user_id { Some(code.clone()) } else { None }) {
+  if let Some((code, room)) = rooms.iter().find(|(_, room)| room.host == user_id) {
+    let code = code.clone();
+
+    // Notifica tutti i giocatori
+    for (&player_id, player) in &room.players {
+      if player_id != user_id {  // Esclude l'host
+        let chat_id = ChatId(player_id as i64);
+        if let Err(e) = bot.send_message(chat_id, format!("La stanza è stata chiusa da {}", display_name).to_string()).await {
+          println!("{} Impossibile notificare il giocatore {}: {}", "ERROR:".red().bold(), player.username, e);
+        }
+      }
+    }
+
+    // Rimuovi la stanza
     rooms.remove(&code);
-    println!("{} {} ha terminato il gioco nella stanza {}", "END:".red().bold(), username.red().italic(), code.red().italic());
+
+    println!("{} {} ha terminato il gioco nella stanza {}", "END:".red().bold(), display_name.red().italic(), code.red().italic());
     bot.send_message(msg.chat.id, "Il gioco è finito! La stanza è stata chiusa").await?;
   } else {
     bot.send_message(msg.chat.id, "Non sei l'host di nessuna stanza").await?;
   }
   Ok(())
 }
-
 async fn info(bot: Bot, msg: Message, rooms: Rooms) -> ResponseResult<()> {
   let rooms = rooms.lock().await;
 
