@@ -12,6 +12,7 @@ use crate::commands::Command;
 #[tokio::main]
 async fn main() {
   pretty_env_logger::init();
+  colored::control::set_override(true);
   log::info!("Starting bot...");
 
   let bot = Bot::from_env();

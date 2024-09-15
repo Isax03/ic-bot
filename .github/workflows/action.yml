@@ -20,6 +20,6 @@ jobs:
           sudo docker build -t ic-bot .
           sudo docker stop ic-bot || true
           sudo docker rm ic-bot || true
-          sudo docker run -d --name ic-bot \
+          sudo docker run -dt --name ic-bot \
             -e TELOXIDE_TOKEN=$TELOXIDE_TOKEN \
             ic-bot
